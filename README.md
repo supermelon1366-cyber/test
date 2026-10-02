@@ -1,99 +1,112 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>테스트용 웹페이지</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: Arial, "Noto Sans KR", sans-serif;
-      background: #f3f5f9; color: #202536;
-    }
-    header {
-      background: #293a80; color: white; padding: 22px 8%;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    header h1 { margin: 0; font-size: 1.35rem; }
-    nav a { color: white; text-decoration: none; margin-left: 20px; }
-    main { width: min(900px, 90%); margin: 48px auto; }
-    .hero {
-      background: white; padding: 36px; border-radius: 18px;
-      box-shadow: 0 8px 28px #1c2b5512; text-align: center;
-    }
-    .hero h2 { margin-top: 0; font-size: 2rem; }
-    .hero p { color: #667085; line-height: 1.7; }
-    button {
-      border: 0; border-radius: 9px; padding: 12px 20px;
-      background: #4056b4; color: white; font-size: 1rem; cursor: pointer;
-    }
-    button:hover { background: #293a80; }
-    .counter { margin-top: 28px; padding: 22px; background: #eef1ff; border-radius: 12px; }
-    #count { font-size: 2rem; font-weight: bold; margin: 12px; }
-    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 22px; }
-    .card { background: white; padding: 22px; border-radius: 14px; box-shadow: 0 5px 18px #1c2b550b; }
-    .card h3 { margin-top: 0; }
-    footer { text-align: center; color: #7b8190; padding: 28px; }
-    @media (max-width: 650px) {
-      header { align-items: flex-start; gap: 12px; flex-direction: column; }
-      nav a { margin: 0 14px 0 0; }
-      .cards { grid-template-columns: 1fr; }
-      .hero { padding: 26px 18px; }
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>테스트 페이지</h1>
-    <nav>
-      <a href="#home">홈</a>
-      <a href="#features">기능</a>
-      <a href="#counter">카운터</a>
-    </nav>
-  </header>
 
-  <main id="home">
-    <section class="hero">
-      <h2>안녕하세요! 👋</h2>
-      <p>HTML, CSS, JavaScript로 만든 간단한 테스트용 웹페이지입니다.<br>
-         화면 크기와 버튼 동작을 자유롭게 확인해 보세요.</p>
-      <button id="helloButton">눌러 보기</button>
-      <p id="message" aria-live="polite"></p>
-    </section>
+const SHEET_NAME = "data";
+const HEADERS = ["작성 시간", "별명", "응원 메시지"];
 
-    <section class="counter" id="counter">
-      <h2>클릭 카운터</h2>
-      <p>버튼을 누르면 숫자가 바뀝니다.</p>
-      <div id="count">0</div>
-      <button id="plusButton">+1 증가</button>
-      <button id="resetButton" style="background:#687083">초기화</button>
-    </section>
+// 시트와 컬럼 자동 생성 및 보완
+function getDataSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(SHEET_NAME);
 
-    <section class="cards" id="features">
-      <article class="card"><h3>HTML</h3><p>웹페이지의 구조를 만듭니다.</p></article>
-      <article class="card"><h3>CSS</h3><p>색상, 여백, 배치 등 디자인을 담당합니다.</p></article>
-      <article class="card"><h3>JavaScript</h3><p>버튼 클릭 같은 동작을 처리합니다.</p></article>
-    </section>
-  </main>
-  <footer>나만의 테스트 페이지 · 2026</footer>
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
 
-  <script>
-    let count = 0;
-    const countDisplay = document.querySelector("#count");
+  // 첫 번째 행의 기존 헤더 확인
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const currentHeaders = sheet.getRange(1, 1, 1, lastCol)
+    .getValues()[0];
 
-    document.querySelector("#helloButton").addEventListener("click", () => {
-      document.querySelector("#message").textContent = "버튼이 정상적으로 작동합니다!";
+  // 필요한 헤더가 없으면 마지막 컬럼 뒤에 추가
+  HEADERS.forEach(header => {
+    if (!currentHeaders.includes(header)) {
+      const newCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, newCol).setValue(header);
+      currentHeaders.push(header);
+    }
+  });
+
+  // 헤더 서식 설정
+  sheet.getRange(1, 1, 1, sheet.getLastColumn())
+    .setFontWeight("bold")
+    .setBackground("#d9ead3");
+
+  sheet.setFrozenRows(1);
+
+  return sheet;
+}
+
+// 웹사이트에서 데이터를 받는 함수
+function doPost(e) {
+  try {
+    const params = e.parameter || {};
+
+    // JSON 또는 폼 데이터 처리
+    let data = params;
+    if (e.postData && e.postData.type &&
+        e.postData.type.includes("application/json")) {
+      data = JSON.parse(e.postData.contents);
+    }
+
+    const nickname = String(data.nickname || "").trim();
+    const message = String(data.message || "").trim();
+
+    // 입력값 검사
+    if (!nickname || !message) {
+      return jsonResponse({
+        success: false,
+        message: "별명과 응원 메시지를 입력해 주세요."
+      });
+    }
+
+    if (nickname.length > 30 || message.length > 500) {
+      return jsonResponse({
+        success: false,
+        message: "별명은 30자, 메시지는 500자 이내로 입력해 주세요."
+      });
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(10000);
+
+    try {
+      const sheet = getDataSheet();
+
+      // 헤더 이름에 맞게 저장 위치 확인
+      const headers = sheet.getRange(
+        1, 1, 1, sheet.getLastColumn()
+      ).getValues()[0];
+
+      const row = new Array(headers.length).fill("");
+      row[headers.indexOf("작성 시간")] = new Date();
+      row[headers.indexOf("별명")] = nickname;
+      row[headers.indexOf("응원 메시지")] = message;
+
+      sheet.appendRow(row);
+    } finally {
+      lock.releaseLock();
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "응원 메시지가 등록되었습니다."
     });
 
-    document.querySelector("#plusButton").addEventListener("click", () => {
-      count++;
-      countDisplay.textContent = count;
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      message: "오류가 발생했습니다."
     });
+  }
+}
 
-    document.querySelector("#resetButton").addEventListener("click", () => {
-      count = 0;
-      countDisplay.textContent = count;
-    });
-  </script>
-</body>
-</html>
+// JSON 응답 생성
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 최초 실행 시 시트 준비
+function setup() {
+  getDataSheet();
+}
